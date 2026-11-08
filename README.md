@@ -1,4 +1,5 @@
 # LangDuck
+<img width="1024" height="1024" alt="image" src="https://github.com/user-attachments/assets/d5915671-cc1b-4095-a54b-2db84612410b" />
 
 **Make your agents quack.**
 
