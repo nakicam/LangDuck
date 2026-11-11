@@ -7,7 +7,7 @@ name = "langduck"
 version = "0.0.0"
 description = "Learning project: a small agent core, built step by step."
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["langchain-core>=1.7,<2", "pydantic>=2.7,<3"]
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff"]

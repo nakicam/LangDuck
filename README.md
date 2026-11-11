@@ -3,7 +3,7 @@
 
 **Make your agents quack.**
 
-LangDuck ist das Konzept für ein leichtgewichtiges Python-Framework, mit dem sich KI-Agenten erstellen, kombinieren, evaluieren und überwachen lassen. Der Schwerpunkt liegt auf sicheren Anwendungen rund um Daten und GovTech.
+LangDuck ist das Konzept für ein leichtgewichtiges Python-Framework, mit dem sich KI-Agenten erstellen, kombinieren, evaluieren und überwachen lassen. Es baut auf LangChain (`langchain-core`) auf und ergänzt eine dünne Schicht für Grenzen, Quellen, Freigaben und Beobachtbarkeit. Der Schwerpunkt liegt auf sicheren Anwendungen rund um Daten und GovTech.
 
 ## Ziel und Zielgruppe
 
@@ -37,7 +37,7 @@ LangDuck ist derzeit ein Framework-Konzept. Die Modulnamen und Aufgaben skizzier
 
 ## DuckOps Entenhausen: erster Framework-Prototyp
 
-Die konkrete Planung verwendet vollständig synthetische Stadtwerkedaten: Gebäude, Verbrauch, Wartungsaufträge und Störungen. Sie verbindet direkte SQLite-Tools, eine REST API und einen lokalen MCP Server mit dem geplanten LangDuck-Agentenkern.
+Die konkrete Planung verwendet vollständig synthetische Stadtwerkedaten: Gebäude, Verbrauch, Wartungsaufträge und Störungen. Sie verbindet direkte SQLite-Tools, eine REST API und einen lokalen MCP Server mit dem geplanten LangDuck-Agenten, der auf LangChain-Modellen und -Tools aufsetzt.
 
 - [Projektplan, Architektur und Diagramme](docs/duckops-plan.md)
 - [Epic und priorisierte Aufgaben](https://github.com/nakicam/LangDuck/issues/2)

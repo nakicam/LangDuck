@@ -19,14 +19,14 @@ Reihenfolge für den kleinen Anfang (vor MCP und REST):
 
 | Schritt | Aufgabe | Datei | Leitfrage |
 | --- | --- | --- | --- |
-| 1 | LD-01 Verträge | `src/langduck/types.py` | Welche Daten wandern zwischen Modell, Tool und Ergebnis? |
-| 2 | LD-03 Tool | `src/langduck/tools.py` | Was passiert bei ungültigen Argumenten? |
-| 3 | LD-06 Fake-Modell und Schleife | `src/langduck/agent.py` | Woran erkenne ich, dass der Agent nicht endlos läuft? |
+| 1 | LD-01 Verträge | `src/langduck/types.py` | Welche Daten ergänzt LangDuck zu den LangChain-Typen (Limits, Status, Quellen, Draft)? |
+| 2 | LD-03 Tool | `src/langduck/tools.py` | Was passiert bei ungültigen Argumenten, und wie landen Quellen im Artifact? |
+| 3 | LD-06 Fake-Modell und Schleife | `src/langduck/agents.py` | Woran erkenne ich, dass der Agent nicht endlos läuft? |
 | 4 | LD-07 Grenzen | `src/langduck/guardrails.py` | Welche Grenze greift zuerst, und wie sieht der Fehler aus? |
-| 5 | Erste Tests | `tests/test_agent.py` | Kann ich den kompletten Lauf ohne Modellschlüssel prüfen? |
+| 5 | Erste Tests | `tests/test_agent.py` | Kann ich den kompletten Lauf ohne Modellschlüssel prüfen (LangChain-Fake-Chatmodell)? |
 
 Danach: LD-02 Daten, LD-04 REST, LD-05 MCP, LD-08 echter Provider, LD-09 Evaluation.
-Am Ende: dieselbe Demo mit LangGraph nachbauen und vergleichen.
+Optional am Ende: dieselbe Demo mit LangGraph nachbauen und vergleichen.
 
 ## Review-Fragen (Dauerliste)
 

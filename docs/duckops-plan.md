@@ -5,7 +5,7 @@ Tracking: [Epic #2](https://github.com/nakicam/LangDuck/issues/2).
 
 ## Ziel und Referenzdemo
 
-LangDuck erhält einen eigenen kleinen Python-Agentenkern, inspiriert von der LangChain-Idee aus Modell, Tools und iterativer Ausführung. LangChain/LangGraph sind keine Voraussetzung des geplanten Kerns. Die fiktive Stadtwerke-Demo DuckOps bleibt vom Framework getrennt.
+LangDuck erhält einen kleinen Python-Agentenkern, der von Anfang an auf langchain-core aufbaut: Nachrichten, Toolaufrufe, Tools (`BaseTool`) und Chatmodelle (`BaseChatModel`) kommen aus LangChain. LangDuck ergänzt Ausführungsloop, Grenzen, Status, Quellen und Entwürfe. LangGraph ist nicht Teil des Kerns. Die fiktive Stadtwerke-Demo DuckOps bleibt vom Framework getrennt.
 
 Referenzauftrag: **„Finde den erhöhten Wasserverbrauch im Entenbad, prüfe die offenen Störungen und erstelle einen begründeten Wartungsentwurf.“**
 
@@ -16,7 +16,7 @@ Der Agent liest Verbrauch über Datenbanktools, korreliert eine Störung über M
 ```mermaid
 flowchart TD
  A["CLI / Python API"] --> B["LangDuck Agent Runner"]
- B --> C["ModelAdapter: Fake / ein Provider"]
+ B --> C["Chatmodell: LangChain Fake / ein Provider"]
  B --> D["Registry, Validierung und Limits"]
  D --> E["Lokale Datenbanktools"]
  E --> F[("assets.db")]
@@ -30,9 +30,9 @@ flowchart TD
 
 | Modul | MVP-Verantwortung |
 | --- | --- |
-| langduck.agents | Agentenkonfiguration und eigener Ausführungsloop |
-| langduck.models | Providerunabhängiger Vertrag, Fake-Modell und ein echter Adapter |
-| langduck.tools | ToolSpec, Registry, Schema-Prüfung und ToolResult |
+| langduck.agents | `Agent`-Klasse (Komposition um ein LangChain-Chatmodell) und eigener Ausführungsloop |
+| langduck.models | Fake-Chatmodell (LangChain) und ein echtes LangChain-Chatmodell mit Providerpaket |
+| langduck.tools | `duck_tool`-Dekorator und `DuckTool` (Subklasse von `BaseTool`) mit Schema-Prüfung, Registry und Quellen-IDs als Artifact |
 | langduck.guardrails | Allowlist, Grenzen, Deadline und Eingabevalidierung |
 | langduck.memory | Nachrichten und Toolergebnisse eines Laufs, nur im Speicher |
 | langduck.observability | Strukturierte JSONL-Ereignisse |
@@ -41,11 +41,42 @@ flowchart TD
 
 Vorgeschlagene Ablage: src/langduck/ für Frameworkcode, examples/duckops/ für Generator, Datenzugriff, API, MCP Server und CLI, tests/ für deterministische Tests, evals/duckops/ für Aufgaben und Ground Truth, docs/ für Architektur und Anleitung. Generierte Datenbanken und Logs gehören in ignorierte Laufzeitverzeichnisse.
 
+## LangDuck als dünne Schicht über LangChain
+
+LangDuck ersetzt LangChain nicht, sondern gibt ihm einen kleinen, sicherheitsbewussten Rahmen. Entscheidung: **Komposition mit eigenen Klassen** statt Wrapper-Funktionen um alles oder Vererbung von Modellklassen.
+
+| Baustein | Form | Begründung |
+| --- | --- | --- |
+| `Agent` | Eigene Klasse; hält ein beliebiges `BaseChatModel`, Tools und `RunConfig`; `run(frage) -> RunResult` | Modell bleibt austauschbar, Loop und Grenzen gehören LangDuck |
+| `DuckTool` / `@duck_tool` | Subklasse von `BaseTool` beziehungsweise Dekorator um LangChains `tool` | Erzwingt `content_and_artifact`, Quellen-IDs, Fehlerklassifikation und Timeout |
+| `Guardrails` | Eigene Klasse; Allowlist, Limits, Deadline | LangChain bringt dies nicht mit |
+| Ereignisse | Eigene Klasse, schreibt JSONL | Pro Run genau ein Abschlussereignis |
+| Modelle | Keine Subklasse, nur Parameter | Jedes LangChain-Chatmodell funktioniert, Fake-Modell für Offline-Läufe |
+
+Geplante öffentliche API, Entwurf (noch nicht implementiert):
+
+```python
+agent = Agent(model=chat_model, tools=[list_buildings, get_consumption], config=RunConfig())
+result = agent.run("Finde den erhöhten Wasserverbrauch im Entenbad ...")
+```
+
+```mermaid
+flowchart LR
+ A["Nutzercode"] --> B["langduck.Agent"]
+ B --> C["Guardrails und Limits"]
+ B --> D["BaseChatModel (LangChain)"]
+ B --> E["DuckTool (BaseTool)"]
+ E --> F["ToolArtifact: Quellen und Fehler"]
+ B --> G["RunResult, JSONL-Ereignisse"]
+```
+
+Regeln: Kein LangChain-Code wird kopiert oder umgeschrieben. Eigene Klassen enthalten nur, was LangChain nicht liefert. Die Schicht bleibt über LangChain-Typen austauschbar; LangGraph kann später ersetzend oder vergleichend daneben stehen.
+
 ## Verträge und Ausführungsregeln
 
-- Agent arbeitet gegen eigene Typen: ModelAdapter, ModelResponse, typisierte Nachrichten, ToolCall(call_id, name, arguments), ToolSpec, ToolResult, RunConfig und RunResult. Diese sind kleine interne Verträge, keine generische Kompatibilitätsplattform.
-- ToolSpec enthält Namen, Beschreibung, Eingabeschema und ausführbaren Adapter. Ergebnisse enthalten Daten, Quellen-IDs und einen definierten Fehlerstatus.
-- ModelAdapter übersetzt Tool-Calling einschließlich Call-IDs; Providerobjekte bleiben im Adapter.
+- Agent arbeitet mit LangChain-Typen: `AIMessage`, `ToolMessage`, `BaseTool` und `BaseChatModel`; Toolaufrufe sind LangChain-`ToolCall` (name, args, id). LangDuck definiert zusätzlich RunConfig, RunResult, RunStatus, RunError, SourceRef, ToolArtifact und MaintenanceDraft in `langduck/types.py`. Keine generische Kompatibilitätsplattform.
+- Tools sind LangChain-Tools mit `response_format="content_and_artifact"`: der Text geht ans Modell, das `ToolArtifact` (Quellen-IDs, Fehlerklassifikation) bleibt maschinenlesbar in `ToolMessage.artifact`. Fehlerstatus bleibt definiert (`ToolMessage.status`).
+- Der Loop ist eigener LangDuck-Code. Chatmodelle werden über LangChain angebunden (Abhängigkeit `langchain-core` plus ein Providerpaket für LD-08, Version pinnen); für Offline-Läufe dient ein LangChain-Fake-Chatmodell.
 - RunResult enthält Antwort, Status, Schrittzahl, Fehler, vorhandene Nutzungsdaten und den letzten validierten strukturierten Wartungsentwurf. Draft: building_id, title, priority, rationale, source_ids und draft=true; keine Persistenz.
 - Status: completed, failed oder limit_reached. Mehrere Aufrufe pro Modellrunde werden sequenziell abgearbeitet.
 - Standard: maximal 5 Modellrunden, 10 Toolaufrufe und 60 Sekunden Gesamtlaufzeit. I/O benötigt eigene Timeouts; blockierte Aufrufe müssen sauber beendet beziehungsweise ihre Prozesse geschlossen werden.
@@ -193,7 +224,7 @@ flowchart TD
 | Risiko | Entscheidung |
 | --- | --- |
 | Scope wächst zum vollständigen Framework | P0 konsequent begrenzen; P1/P2 separat |
-| Tool-Calling unterscheidet sich je Provider | Eigene Typen, Fake-Antworten und Adaptertests |
+| LangChain-Typen und -Versionen ändern sich; Tool-Calling unterscheidet sich je Provider | `langchain-core` pinnen, LangChain-Fake-Chatmodell und Tests je Provider, LangDuck-Ergebnistypen klein halten |
 | MCP-Schemas oder Prozesslebenszyklus verursachen Fehler | Nur zwei erlaubte Tools, ein Transport und frühe Integrationstests |
 | Modell erfindet Werte oder Quellen | Berechnungen in Tools; Ground Truth und Belegprüfung |
 | Abbruch wartet nur statt Operation zu stoppen | I/O-Timeouts, Deadlines und Prozessbereinigung testen |
