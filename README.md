@@ -34,3 +34,12 @@ Die folgende Übersicht beschreibt das angestrebte Konzept, nicht den Nachweis b
 ## Projektstatus und Umfang
 
 LangDuck ist derzeit ein Framework-Konzept. Die Modulnamen und Aufgaben skizzieren eine mögliche Architektur; sie sind keine Aussage darüber, dass diese Module, APIs oder Integrationen bereits implementiert oder einsatzbereit sind. Dieses Repository dokumentiert aktuell die Projektidee. Installationsanleitungen, Nutzungsbeispiele und Aussagen zu Releases oder Stabilität folgen erst, wenn es eine entsprechende Implementierung gibt.
+
+## DuckOps Entenhausen: erster Framework-Prototyp
+
+Die konkrete Planung verwendet vollständig synthetische Stadtwerkedaten: Gebäude, Verbrauch, Wartungsaufträge und Störungen. Sie verbindet direkte SQLite-Tools, eine REST API und einen lokalen MCP Server mit dem geplanten LangDuck-Agentenkern.
+
+- [Projektplan, Architektur und Diagramme](docs/duckops-plan.md)
+- [Epic und priorisierte Aufgaben](https://github.com/nakicam/LangDuck/issues/2)
+
+Status: Planung; die beschriebenen Funktionen sind noch nicht implementiert.
