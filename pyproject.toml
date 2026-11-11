@@ -20,5 +20,5 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 
 [tool.ruff]
-line-length = 200
+line-length = 120
 src = ["src", "tests"]
