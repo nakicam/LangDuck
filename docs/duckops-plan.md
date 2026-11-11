@@ -43,14 +43,14 @@ Vorgeschlagene Ablage: src/langduck/ für Frameworkcode, examples/duckops/ für 
 
 ## Verträge und Ausführungsregeln
 
-- Agent arbeitet gegen eigene Typen: ModelAdapter, ToolSpec, ToolResult, RunConfig und RunResult.
+- Agent arbeitet gegen eigene Typen: ModelAdapter, ModelResponse, typisierte Nachrichten, ToolCall(call_id, name, arguments), ToolSpec, ToolResult, RunConfig und RunResult. Diese sind kleine interne Verträge, keine generische Kompatibilitätsplattform.
 - ToolSpec enthält Namen, Beschreibung, Eingabeschema und ausführbaren Adapter. Ergebnisse enthalten Daten, Quellen-IDs und einen definierten Fehlerstatus.
 - ModelAdapter übersetzt Tool-Calling einschließlich Call-IDs; Providerobjekte bleiben im Adapter.
-- RunResult enthält Antwort, Status, Schrittzahl, Fehler und vorhandene Nutzungsdaten.
+- RunResult enthält Antwort, Status, Schrittzahl, Fehler, vorhandene Nutzungsdaten und den letzten validierten strukturierten Wartungsentwurf. Draft: building_id, title, priority, rationale, source_ids und draft=true; keine Persistenz.
 - Status: completed, failed oder limit_reached. Mehrere Aufrufe pro Modellrunde werden sequenziell abgearbeitet.
 - Standard: maximal 5 Modellrunden, 10 Toolaufrufe und 60 Sekunden Gesamtlaufzeit. I/O benötigt eigene Timeouts; blockierte Aufrufe müssen sauber beendet beziehungsweise ihre Prozesse geschlossen werden.
-- Keine automatischen Retries im MVP. Fehlerbehandlung bleibt nachvollziehbar und innerhalb der Grenzen.
-- MCP: ein lokaler Server, stdio, Initialisierung und Tool-Discovery; nur zwei explizit erlaubte Tools. Schemas werden validiert, Namen kollisionsfrei zugeordnet. Protokolldaten auf stdout, Diagnose auf stderr.
+- Keine automatischen Retries im MVP, einschließlich deaktivierter SDK-Retries. Fehlerbehandlung bleibt nachvollziehbar und innerhalb der Grenzen.
+- MCP: ein lokaler Server, stdio, SDK-gesteuerter Lebenszyklus der ausdrücklich getesteten und gepinnten Protokollrevision sowie Tool-Discovery; nur zwei explizit erlaubte Tools. Schemas werden validiert, Namen kollisionsfrei zugeordnet. Protokolldaten auf stdout, Diagnose auf stderr.
 - Toolinhalte sind Daten und vergeben keine Berechtigungen. Die Allowlist ersetzt keine allgemeine Absicherung gegen alle Prompt-Injection-Angriffe.
 
 ## Datenmodell und Testdaten
@@ -67,6 +67,8 @@ Alle Daten sind synthetisch. Seed 42 und Referenzdatum 2026-11-01 sind festgeleg
 
 720 Verbrauchswerte = 20 Gebäude × 12 Monate × 3 Metriken. Einheiten: Strom/Wärme in kWh, Wasser in m³. Assets und Verbrauch liegen in assets.db; Betriebsdaten in operations.db. Gemeinsame Gebäude-IDs werden vom Generator geprüft; es gibt keine datenbankübergreifenden Foreign Keys.
 
+Logische Beziehungen; keine datenbankübergreifenden Foreign Keys.
+
 ```mermaid
 erDiagram
  BUILDING ||--o{ CONSUMPTION : besitzt
@@ -76,10 +78,10 @@ erDiagram
 ```
 
 Bewusst eingebaute Fälle:
-1. Entenbad: Wasserverbrauch Oktober gegenüber September +80 %.
-2. Offene Leckmeldung am selben Gebäude.
+1. Entenbad: September 100 m³, Oktober 180 m³, damit +80 %; beide Quellen-IDs werden geprüft.
+2. Offene Leckmeldung am selben Gebäude: mögliche Erklärung, kein Beweis für die Ursache.
 3. Überfälliger dringender Heizungsauftrag.
-4. Zwei inhaltlich doppelte Wartungsaufträge.
+4. Zwei inhaltlich doppelte Wartungsaufträge innerhalb der insgesamt 100 Aufträge. Überfälligkeit: unerledigter Status und due_date vor 2026-11-01.
 
 Ein getrenntes Ground-Truth-Manifest beschreibt erwartete IDs und Werte; der Agent erhält keinen Zugriff darauf. Auch Beschreibungen mit irreführenden Anweisungen werden als Fehlerfall getestet.
 
@@ -95,7 +97,7 @@ Ein getrenntes Ground-Truth-Manifest beschreibt erwartete IDs und Werte; der Age
 
 FastAPI bietet GET /maintenance-orders, GET /incidents und GET /health. Nur localhost, nur lesende Geschäftsoperationen, begrenzte Antworten und klare Fehlerverträge. SQL ausschließlich parametrisiert und vordefiniert; keine freie SQL-Ausführung durch das Modell.
 
-Vormonatsabweichungen berechnet das Datenbanktool deterministisch. Fehlende beziehungsweise nullwertige Vergleichsgrößen werden ausdrücklich gekennzeichnet.
+Vormonatsabweichungen berechnet das Datenbanktool deterministisch: (aktuell − Vormonat) / Vormonat × 100. Der vorherige Kalendermonat wird auch außerhalb des angefragten Ausgabefensters gelesen. Ergebnis enthält beide Quellen-IDs, Baseline-Monat/-Wert, absolute Differenz und Prozentwert. Fehlende und nullwertige Baselines ergeben jeweils null Prozent mit eigenem Grund.
 
 ## Ablauf der Referenzdemo
 
@@ -108,7 +110,7 @@ sequenceDiagram
  participant A as Wartungs-API
  U->>L: Wasserauffälligkeit und Wartungsentwurf
  L->>D: Gebäude und Verbrauch abrufen
- D-->>L: Entenbad +80 % mit Quellen
+ D-->>L: September/Oktober-Werte, +80 % und beide Quellen
  L->>M: list_incidents / list_maintenance_orders
  M->>A: GET mit Gebäude-ID
  A-->>M: Offene Störung und Aufträge
@@ -145,7 +147,7 @@ Alle verlinkten Aufgaben enthalten Checklisten, Abnahmekriterien und ein eigenes
 | [LD-12](https://github.com/nakicam/LangDuck/issues/14) | P1 | Zweiten Modellprovider und PostgreSQL-Adapter erproben | offen | LD-10 |
 | [LD-13](https://github.com/nakicam/LangDuck/issues/15) | P2 | Freigaben, persistente Zustände und einfache Flows konzipieren | offen | LD-10 |
 
-P0: **50 Stunden**, zusätzlich **4 Stunden Integrationsreserve** = **54 Stunden**. Planungskorridor 48–60 Stunden; etwa sieben Wochen bei acht Stunden/Woche, mit Puffer sechs bis acht Wochen. P1/P2 werden erst nach der MVP-Abnahme geschätzt.
+P0: **50 Stunden**, zusätzlich **4 Stunden Integrationsreserve** = **54 Stunden**. Vorläufiges Planungsziel für eine kleine lokale Demo: etwa sieben Wochen bei acht Stunden/Woche. Voraussetzung: ein Provider, feste Daten, kein Streaming, keine Retries und keine generische Pluginplattform. Nach MCP-Integration (LD-05 / #7) neu schätzen; der frühere Korridor 48–60 Stunden ist kein statistisch abgesichertes Intervall. P1/P2 werden erst nach der MVP-Abnahme geschätzt.
 
 ## Etappen und Reihenfolge
 
@@ -156,6 +158,8 @@ P0: **50 Stunden**, zusätzlich **4 Stunden Integrationsreserve** = **54 Stunden
 | C: Agentenkern und Grenzen | 11 h | Deterministischer Gesamtablauf mit Fake-Modell |
 | D: Modell und Evaluation | 12 h | Echter Agentenlauf und Qualitätsbericht |
 | E: CLI und Abnahme | 4 h + 4 h Reserve | Installation und Demo in frischer Umgebung |
+
+Vereinfachte Abhängigkeitsübersicht; vollständige Abhängigkeiten stehen in der Backlog-Tabelle.
 
 ```mermaid
 flowchart TD
@@ -175,12 +179,12 @@ flowchart TD
 
 - Frische Installation und Offline-Demo funktionieren ohne Modellschlüssel.
 - Referenzdemo verbindet direkten Datenbankzugriff und echte lokale MCP-Kommunikation.
-- Mindestens 8 von 10 festgelegten fachlichen Live-Fällen bestehen.
+- Mindestens 8 von 10 vorab festgelegten fachlichen Live-Fällen sowie zwingend der Referenzfall bestehen. Jeder Fall benötigt alle definierten Pflichtkriterien: erwartete Datensätze, numerische Toleranz, belegte Aussagen und gegebenenfalls gültiger Entwurf. Ohne Modellschlüssel gilt Live-Evaluation als not_run und bleibt offen.
 - Zahlen, fachliche Belegbarkeit und Gültigkeit der Quellen-IDs werden getrennt geprüft.
 - Alle deterministischen Grenz- und Fehlerfälle bestehen: Loop, Toolanzahl, Deadline, Timeouts, unbekanntes Tool, ungültige Parameter, MCP-Ausfall und Zustandsisolation.
 - JSONL enthält Run-ID, Call-ID, Dauer, Status und Fehlercode; pro Run genau ein Abschlussereignis.
 - Prompts und vollständige Toolinhalte sind standardmäßig nicht im Log; Geheimnisse niemals.
-- Offline-Prüfungen sind für CI geeignet; Live-Evaluation bleibt explizit und berichtet Modell-ID, Datum und Datensatzversion.
+- Offline-Prüfungen werden in CI implementiert; Live-Evaluation bleibt explizit und berichtet Modell-ID, SDK, Parameter, Datum sowie Datensatzversion/-Hash.
 - Entwürfe erzeugen keine Aufträge. Bekannte Grenzen werden dokumentiert.
 - SDK-Versionen werden bei der Umsetzung anhand offizieller Dokumentation geprüft und per Lockdatei festgehalten.
 
@@ -204,3 +208,43 @@ flowchart TD
 5. LD-06: ersten Fake-Durchlauf über Datenbank und MCP ausführen.
 
 Technische Führung: Architektur, API-Entscheidungen und Abnahme durch den Projektverantwortlichen. Keine Beteiligung oder Verfügbarkeit weiterer Personen vorausgesetzt. Die Issues enthalten noch keine Zusage zu einem Kalenderstart.
+
+## Präzisierte Schnittstellen und Fehlersemantik
+
+- Modellantwort mit Toolaufrufen: Aufrufe bearbeiten; begleitender Text ist noch keine Finalantwort. Leere oder malformed Modellantwort führt zu failed.
+- Behebbare Toolfehler als ToolResult mit ursprünglicher Call-ID zurückgeben. Nicht fortsetzbare Modell-/Protokoll-/Adapterfehler ergeben failed. Budget oder Gesamtlaufzeit ergeben limit_reached. completed bezeichnet reguläres Laufende, nicht bestätigte fachliche Richtigkeit.
+- Modellbudget zählt versuchte Modellaufrufe. Toolbudget zählt versuchte Aufrufe einschließlich abgelehnter Versuche. Vor jedem einzelnen Aufruf prüfen; nach Ausschöpfung keinen weiteren starten. Der Timeout einer Operation ist das Minimum aus ihrem Timeout und der verbleibenden Deadline.
+- Gesamtdeadline schließt MCP-Aufbau und Discovery ein. Abbruchgarantien gelten für die mitgelieferten kooperativen Adapter und verwalteten MCP-Prozesse.
+- Große Ergebnisse als bounded pages mit total/has_more oder definiertem Fehler ausgeben, niemals JSON durch blindes Abschneiden beschädigen.
+- REST: priority nur für Wartungsaufträge. Beide Listen verwenden limit (Standard 20, Maximum 100), offset und stabile ID-Sortierung. Gültige unbekannte Gebäude-ID: 200 mit leerer Liste; ungültige Filter: 422.
+- MCP: Ergebnisse mit vereinbartem strukturiertem Schema validieren. Toolfehler, Protokollfehler und Transportfehler unterscheiden. Unsupported Schemas, Inhaltsarten und zusätzliche Result-/Interaktionsmodi explizit ablehnen. Keine generische Unterstützung aller Protokollrevisionen im MVP.
+- Offline bedeutet keine Modellschlüssel und keine externen Provideraufrufe; echte lokale SQLite-, REST- und MCP-Verbindungen bleiben aktiv. FastAPI wird separat gestartet; der Agent verwaltet und beendet seinen MCP-Subprozess.
+- Entwurfstool liegt in examples/duckops; Registry und Runner bleiben domänenneutral.
+
+## Diagramm des vollständigen Laufstatus
+
+```mermaid
+stateDiagram-v2
+ [*] --> Model
+ Model --> Tools: Toolaufrufe
+ Tools --> Model: Ergebnisse oder behebbare Fehler
+ Model --> Completed: Finalantwort
+ Model --> Failed: Nicht fortsetzbarer Fehler
+ Tools --> Failed: Nicht fortsetzbarer Fehler
+ Model --> LimitReached: Budget oder Deadline
+ Tools --> LimitReached: Budget oder Deadline
+ Completed --> [*]
+ Failed --> [*]
+ LimitReached --> [*]
+```
+
+## MVP-Abschluss und spätere Planung
+
+Epic #2 ist nach Abnahme von LD-01 bis LD-10 abschließbar. LD-11 bis LD-13 blockieren diesen Abschluss nicht. Die Sammelaufgaben für Provider/PostgreSQL und Freigaben/Zustand/Flows werden nach MVP-Abnahme in separat priorisierte, geschätzte Umsetzungstasks zerlegt; diese Erweiterungen haben keine automatische gegenseitige Abhängigkeit.
+
+## Technische Referenzen
+
+Bei Implementierung sind die tatsächlich verwendeten SDK- und Protokollrevisionen zu dokumentieren. Insbesondere ist ein initialize-Handshake kein versionsübergreifender MCP-Vertrag.
+
+- [MCP Versioning and Compatibility, Revision 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning)
+- [MCP Tools, Revision 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)
